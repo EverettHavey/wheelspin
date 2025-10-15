@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Great Spinner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #eef3f6; }
+
+        .wheel-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 0 auto;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3), inset 0 0 10px rgba(0,0,0,0.2);
+            background-color: #f7f7f7;
+        }
+
+        .wheel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1); /* Default transition */
+        }
+
+        .segment {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 50%;
+            height: 50%;
+            transform-origin: 0% 100%;
+            overflow: hidden;
+        }
+        
+        .segment-content {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            transform-origin: 0 0;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            text-align: left;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .marker {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0; 
+            height: 0; 
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid #ef4444; /* Red marker */
+            z-index: 10;
+            filter: drop-shadow(0 4px 4px rgba(0,0,0,0.5));
+        }
+
+        /* Center circle overlay */
+        .center-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            background-color: #1e3a8a;
+            border: 4px solid #ffffff;
+            border-radius: 50%;
+            z-index: 5;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        @media (max-width: 600px) {
+            .wheel-container {
+                width: 90vw;
+                height: 90vw;
+                max-width: 350px;
+                max-height: 350px;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center min-h-screen">
+    <div class="max-w-xl w-full text-center">
+        <h1 class="text-4xl font-extrabold text-indigo-700 mb-6">The Wheel of Fortune</h1>
+    </div>
+    
+    <div class="marker"></div>
+    
+    <!-- Wheel and Result Container -->
+    <div id="wheelContainer" class="wheel-container mb-8">
+        <div id="wheel" class="wheel">
+            <!-- Segments go here -->
+        </div>
+        <div class="center-circle"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex flex-col items-center w-full max-w-sm space-y-4">
+        <button id="spinButton" 
+                class="w-full py-4 px-6 bg-green-500 text-white font-bold text-xl rounded-xl shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-105 disabled:bg-gray-400 disabled:transform-none">
+            Spin the Wheel!
+        </button>
+        
+        <!-- Result Display -->
+        <div id="resultBox" class="w-full p-4 bg-indigo-100 border-l-4 border-indigo-500 rounded-lg shadow-inner text-left">
+            <p class="text-sm font-semibold text-indigo-700 mb-1">Result:</p>
+            <p id="resultText" class="text-2xl font-bold text-indigo-800">Ready to spin!</p>
+        </div>
+
+        <!-- Mode Display -->
+        <div class="mt-4 text-sm font-medium text-gray-600">
+            Mode: <span id="modeDisplay" class="font-bold text-red-500">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center">
+            <h3 id="modalTitle" class="text-2xl font-bold mb-4 text-indigo-700"></h3>
+            <p id="modalMessage" class="mb-6 text-gray-700"></p>
+            <button onclick="document.getElementById('modal').classList.add('hidden')" 
+                    class="py-2 px-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-150">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Global Variables & Initialization ---
+        setLogLevel('Debug');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        let db, auth;
+        let wheelConfig = { options: [], isContinuous: false };
+        let currentRotation = 0;
+        let isSpinning = false;
+        
+        try {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Authentication setup
+            onAuthStateChanged(auth, async (user) => {
+                // Ensure authentication is complete before fetching config
+                if (!user) {
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                }
+                loadConfig();
+            });
+
+        } catch (e) {
+            console.error("Firebase Initialization Error:", e);
+            showMessage('Error', 'Failed to initialize the application. Check console for details.');
+        }
+
+
+        // --- Firestore Paths & Refs ---
+        const CONFIG_PATH = `artifacts/${appId}/public/data/wheelConfig`;
+
+        // --- UI Elements ---
+        const wheelElement = document.getElementById('wheel');
+        const spinButton = document.getElementById('spinButton');
+        const resultText = document.getElementById('resultText');
+        const modeDisplay = document.getElementById('modeDisplay');
+
+        // --- Utility Functions ---
+
+        function showMessage(title, message) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        // --- Wheel Rendering ---
+        const colors = [
+            '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', 
+            '#a1a1aa', '#f43f5e', '#facc15', '#a3e635', '#2dd4bf', '#a78bfa', '#f472b6', '#71717a',
+            '#f87171', '#fb923c', '#fde047', '#4ade80', '#5eead4', '#60a5fa', '#a855f7', '#f472b6'
+        ]; // 24 distinct colors
+
+        function renderWheel() {
+            const options = wheelConfig.options;
+            const numOptions = options.length;
+            if (numOptions === 0) {
+                wheelElement.innerHTML = '<div class="text-center p-20 text-gray-500">No options configured. Use admin.html to set them up.</div>';
+                spinButton.disabled = true;
+                return;
+            }
+            spinButton.disabled = false;
+            
+            const segmentAngle = 360 / numOptions;
+            const halfAngle = segmentAngle / 2;
+            const skewAngle = 90 - segmentAngle;
+            
+            wheelElement.innerHTML = ''; // Clear existing segments
+
+            options.forEach((option, index) => {
+                const color = colors[index % colors.length];
+                const startRotation = index * segmentAngle;
+                
+                // 1. Create the wedge container
+                const segment = document.createElement('div');
+                segment.className = 'segment';
+                segment.style.backgroundColor = color;
+                // Rotate to position the wedge correctly
+                segment.style.transform = `rotate(${startRotation}deg)`;
+
+                // 2. Create the content container and apply rotation/skew to keep text horizontal
+                const content = document.createElement('div');
+                content.className = 'segment-content';
+                
+                // Rotation to counter the segment rotation, plus offset for centering and skew correction
+                const contentTransform = `
+                    rotate(${90 + halfAngle}deg) 
+                    translate(-50%, -50%) 
+                    rotate(${-startRotation}deg) 
+                    translate(20%, -50%)
+                `;
+                content.style.transform = contentTransform;
+
+                // Simple text rendering
+                content.innerHTML = `<span class="truncate">${option.text}</span>`;
+                
+                segment.appendChild(content);
+                wheelElement.appendChild(segment);
+            });
+
+            // Update mode display
+            const mode = wheelConfig.isContinuous ? 'Ev100 (Continuous Spin)' : 'Normal (Stops Randomly)';
+            modeDisplay.textContent = mode;
+            modeDisplay.className = `font-bold ${wheelConfig.isContinuous ? 'text-red-600' : 'text-green-600'}`;
+        }
+
+        // --- Spin Logic ---
+
+        function spin() {
+            if (isSpinning || wheelConfig.options.length === 0) return;
+            isSpinning = true;
+            spinButton.disabled = true;
+            resultText.textContent = 'Spinning...';
+            
+            const numOptions = wheelConfig.options.length;
+            const segmentAngle = 360 / numOptions;
+            
+            // Randomly select the winning index
+            const winningIndex = Math.floor(Math.random() * numOptions);
+            const winner = wheelConfig.options[winningIndex];
+            
+            // Calculate the target rotation (in degrees)
+            // Each segment is segmentAngle wide. The pointer is at 0 degrees (top).
+            // We target the center of the winning segment.
+            // Target angle: (360 - (winningIndex * segmentAngle + half of segmentAngle))
+            // We add 10 full rotations (3600 deg) to make it visually satisfying.
+
+            const offset = segmentAngle / 2; // Target center of the segment
+            const targetPosition = 360 - (winningIndex * segmentAngle + offset);
+            
+            // Ensure target is positive and lands correctly
+            const totalRotations = 10;
+            const targetRotation = totalRotations * 360 + targetPosition;
+
+            // Update the global rotation state
+            currentRotation = targetRotation;
+            
+            // Apply mode-specific styles and logic
+            if (wheelConfig.isContinuous) {
+                // Ev100 / Continuous Mode
+                wheelElement.style.transition = 'transform 600s linear'; // Very long transition
+                wheelElement.style.transform = `rotate(${currentRotation + 100000}deg)`; // Spin a lot
+                
+                // Display the result immediately (the "trick")
+                resultText.textContent = `WINNER (Ev100): ${winner.text}`;
+                
+                // Re-enable button immediately since the spin is "endless"
+                isSpinning = false;
+                spinButton.disabled = false;
+
+            } else {
+                // Normal Mode
+                wheelElement.style.transition = 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)'; // Normal transition
+                wheelElement.style.transform = `rotate(${targetRotation}deg)`;
+
+                // Use a transition end event to show the result
+                const handleTransitionEnd = () => {
+                    wheelElement.removeEventListener('transitionend', handleTransitionEnd);
+                    isSpinning = false;
+                    spinButton.disabled = false;
+                    resultText.textContent = `WINNER: ${winner.text}`;
+                };
+
+                // Add the listener (using setTimeout as fallback/to ensure it triggers)
+                wheelElement.addEventListener('transitionend', handleTransitionEnd);
+                setTimeout(() => {
+                    if (isSpinning) { // Fallback if transitionend fails (e.g., element visibility change)
+                        handleTransitionEnd();
+                    }
+                }, 5100); // Slightly longer than the 5s transition
+            }
+        }
+
+        // --- Firebase Data Fetching ---
+
+        function loadConfig() {
+            if (!db) return;
+            const docRef = doc(db, CONFIG_PATH, 'config');
+
+            // Listen for real-time changes to the configuration
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    wheelConfig = {
+                        options: data.options || [],
+                        isContinuous: data.isContinuous === true
+                    };
+                    renderWheel();
+                } else {
+                    wheelConfig = { options: [], isContinuous: false };
+                    renderWheel();
+                    showMessage('Configuration Warning', 'No wheel configuration found. Please use the admin page to set up options.');
+                }
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                showMessage('Error', 'Failed to load configuration data: ' + error.message);
+            });
+        }
+
+        // --- Event Listeners ---
+        spinButton.addEventListener('click', spin);
+        
+        // Initial wheel reset (to ensure a clean starting point)
+        wheelElement.style.transform = `rotate(0deg)`;
+
+    </script>
+</body>
+</html>

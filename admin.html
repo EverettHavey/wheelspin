@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wheel Spin Admin Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f9; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="loading" class="text-center p-8 text-xl font-semibold text-indigo-600">Loading Configuration...</div>
+    
+    <div id="app" class="hidden max-w-2xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl border border-gray-100">
+        <h1 class="text-3xl font-extrabold text-indigo-700 mb-6 border-b pb-3">Wheel Configuration <span class="text-sm font-normal ml-4 text-gray-500">ID: <span id="appIdDisplay"></span></span></h1>
+        
+        <!-- Segment Count Input -->
+        <div class="mb-6 bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+            <label for="segmentCount" class="block text-sm font-medium text-indigo-700 mb-2">Number of Wheel Segments (Max 24)</label>
+            <input type="number" id="segmentCount" min="2" max="24" value="8" 
+                   class="w-full p-3 border-indigo-300 border rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-lg shadow-sm"
+                   oninput="updateOptionInputs(this.value)">
+        </div>
+
+        <!-- Ev100 / Continuous Spin Toggle -->
+        <div class="mb-8 p-4 rounded-lg bg-red-50 border border-red-200 flex items-center justify-between">
+            <div>
+                <label for="isContinuous" class="text-lg font-bold text-red-700 block">
+                    Enable Continuous Spin (Ev100 Mode)
+                </label>
+                <p class="text-sm text-red-600 mt-1">
+                    When enabled, the wheel spins forever for presentation, and the result is determined instantly upon clicking 'Spin'.
+                </p>
+            </div>
+            <input type="checkbox" id="isContinuous" class="form-checkbox h-6 w-6 text-red-600 rounded-full focus:ring-red-500 transition duration-150 ease-in-out">
+        </div>
+
+        <!-- Dynamic Options Input Area -->
+        <div id="optionsContainer" class="space-y-4">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Segment Labels</h2>
+            <!-- Options will be dynamically generated here -->
+        </div>
+
+        <!-- Save Button -->
+        <button id="saveButton" class="w-full mt-8 py-3 bg-indigo-600 text-white font-bold text-lg rounded-lg hover:bg-indigo-700 transition duration-200 shadow-md hover:shadow-lg disabled:bg-indigo-400">
+            Save Configuration
+        </button>
+
+        <p id="statusMessage" class="mt-4 text-center font-medium"></p>
+    </div>
+
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Global Variables & Initialization ---
+        setLogLevel('Debug');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        document.getElementById('appIdDisplay').textContent = appId;
+        
+        let db, auth;
+        let userId = 'anon'; // Default until authenticated
+        
+        try {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Authentication setup
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                } else {
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                        userId = auth.currentUser?.uid || crypto.randomUUID();
+                    }
+                }
+                loadConfig();
+                document.getElementById('app').classList.remove('hidden');
+                document.getElementById('loading').classList.add('hidden');
+            });
+
+        } catch (e) {
+            console.error("Firebase Initialization Error:", e);
+            document.getElementById('statusMessage').textContent = 'Error loading Firebase. Check console for details.';
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+        }
+
+
+        // --- Firestore Paths ---
+        const CONFIG_PATH = `artifacts/${appId}/public/data/wheelConfig`;
+
+        // --- UI Elements ---
+        const segmentCountInput = document.getElementById('segmentCount');
+        const optionsContainer = document.getElementById('optionsContainer');
+        const isContinuousInput = document.getElementById('isContinuous');
+        const saveButton = document.getElementById('saveButton');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        let currentOptionsData = [];
+
+        // --- Functions ---
+        
+        window.updateOptionInputs = function(count) {
+            count = parseInt(count);
+            if (isNaN(count) || count < 2 || count > 24) return;
+            
+            const existingOptions = optionsContainer.querySelectorAll('input[type="text"]');
+            
+            // Clear existing inputs
+            optionsContainer.innerHTML = '<h2 class="text-xl font-semibold text-gray-700 mb-4">Segment Labels</h2>';
+
+            for (let i = 0; i < count; i++) {
+                const optionText = i < existingOptions.length ? existingOptions[i].value : (currentOptionsData[i]?.text || `Option ${i + 1}`);
+                
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-3';
+                div.innerHTML = `
+                    <span class="text-gray-500 font-medium w-8 text-right">#${i + 1}</span>
+                    <input type="text" value="${optionText}" data-index="${i}"
+                        class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                        placeholder="Enter label for Segment ${i + 1}">
+                `;
+                optionsContainer.appendChild(div);
+            }
+        }
+
+        async function loadConfig() {
+            if (!db) return;
+            const docRef = doc(db, CONFIG_PATH, 'config');
+
+            // Use onSnapshot to listen for real-time updates
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    currentOptionsData = data.options || [];
+                    isContinuousInput.checked = data.isContinuous === true;
+                    segmentCountInput.value = currentOptionsData.length || 8;
+                    updateOptionInputs(currentOptionsData.length || 8);
+                    statusMessage.textContent = 'Configuration loaded successfully.';
+                    statusMessage.className = 'mt-4 text-center font-medium text-green-600';
+                } else {
+                    // Default configuration if none exists
+                    segmentCountInput.value = 8;
+                    updateOptionInputs(8);
+                    isContinuousInput.checked = false;
+                    statusMessage.textContent = 'No configuration found. Using default settings.';
+                    statusMessage.className = 'mt-4 text-center font-medium text-yellow-600';
+                }
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                statusMessage.textContent = 'Error fetching config: ' + error.message;
+                statusMessage.className = 'mt-4 text-center font-medium text-red-600';
+            });
+        }
+
+        async function saveConfig() {
+            saveButton.disabled = true;
+            statusMessage.textContent = 'Saving...';
+            statusMessage.className = 'mt-4 text-center font-medium text-indigo-600';
+
+            const newOptions = [];
+            optionsContainer.querySelectorAll('input[type="text"]').forEach(input => {
+                newOptions.push({ text: input.value.trim() || 'Empty Segment' });
+            });
+
+            const configData = {
+                options: newOptions,
+                isContinuous: isContinuousInput.checked,
+                lastUpdated: new Date()
+            };
+
+            try {
+                const docRef = doc(db, CONFIG_PATH, 'config');
+                await setDoc(docRef, configData);
+                statusMessage.textContent = 'Configuration saved and live!';
+                statusMessage.className = 'mt-4 text-center font-medium text-green-600';
+            } catch (e) {
+                console.error("Error saving document: ", e);
+                statusMessage.textContent = 'Error saving configuration: ' + e.message;
+                statusMessage.className = 'mt-4 text-center font-medium text-red-600';
+            } finally {
+                saveButton.disabled = false;
+            }
+        }
+
+        // --- Event Listeners ---
+        saveButton.addEventListener('click', saveConfig);
+
+        // Initial setup
+        updateOptionInputs(segmentCountInput.value);
+
+    </script>
+</body>
+</html>
