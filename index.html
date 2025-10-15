@@ -3,359 +3,516 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Great Spinner</title>
+    <title>Customizable Spin Wheel</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for custom colors and font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#8b5cf6',
+                        'accent': '#10b981',
+                        'background': '#f9fafb',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #eef3f6; }
-
+        /* Custom styles for the pointer and canvas */
         .wheel-container {
             position: relative;
-            width: 400px;
-            height: 400px;
-            margin: 0 auto;
-            border-radius: 50%;
-            overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3), inset 0 0 10px rgba(0,0,0,0.2);
-            background-color: #f7f7f7;
-        }
-
-        .wheel {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1); /* Default transition */
-        }
-
-        .segment {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            width: 50%;
-            height: 50%;
-            transform-origin: 0% 100%;
-            overflow: hidden;
-        }
-        
-        .segment-content {
-            position: absolute;
-            width: 200%;
-            height: 200%;
-            transform-origin: 0 0;
-            padding: 10px;
             display: flex;
+            justify-content: center;
             align-items: center;
-            justify-content: flex-start;
-            text-align: left;
-            font-size: 14px;
-            font-weight: 600;
-            color: white;
-            white-space: nowrap;
-            overflow: hidden;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+            width: 100%;
         }
 
-        .marker {
+        #wheelCanvas {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 9999px; /* Fully rounded */
+        }
+
+        /* The pointer/marker */
+        .pointer {
             position: absolute;
-            top: -20px;
+            top: 0;
             left: 50%;
-            transform: translateX(-50%);
-            width: 0; 
-            height: 0; 
+            transform: translate(-50%, -100%); /* Position above the center top */
+            width: 0;
+            height: 0;
             border-left: 15px solid transparent;
             border-right: 15px solid transparent;
-            border-top: 25px solid #ef4444; /* Red marker */
+            border-top: 20px solid #ef4444; /* Red color */
             z-index: 10;
-            filter: drop-shadow(0 4px 4px rgba(0,0,0,0.5));
         }
 
-        /* Center circle overlay */
-        .center-circle {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            background-color: #1e3a8a;
-            border: 4px solid #ffffff;
-            border-radius: 50%;
-            z-index: 5;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        /* General utility classes */
+        .btn-primary {
+            @apply px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-indigo-600 transition duration-150 ease-in-out disabled:opacity-50;
         }
-
-        @media (max-width: 600px) {
-            .wheel-container {
-                width: 90vw;
-                height: 90vw;
-                max-width: 350px;
-                max-height: 350px;
-            }
+        .btn-secondary {
+            @apply px-6 py-3 bg-secondary text-white font-bold rounded-xl shadow-lg hover:bg-purple-600 transition duration-150 ease-in-out disabled:opacity-50;
+        }
+        .input-style {
+            @apply w-full p-3 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition duration-150;
         }
     </style>
 </head>
-<body class="p-4 md:p-8 flex flex-col items-center min-h-screen">
-    <div class="max-w-xl w-full text-center">
-        <h1 class="text-4xl font-extrabold text-indigo-700 mb-6">The Wheel of Fortune</h1>
+<body class="bg-background font-sans min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">The Custom Spin Dynamo</h1>
+            <p class="text-gray-500">Define your choices and let the wheel decide!</p>
+        </header>
+
+        <main class="grid lg:grid-cols-3 gap-8">
+            <!-- Wheel and Controls Panel (Always visible, takes full width on mobile/two-thirds on desktop) -->
+            <div class="lg:col-span-2 flex flex-col items-center p-6 bg-white rounded-2xl shadow-xl order-1">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">The Wheel of Fortune</h2>
+
+                <!-- Wheel Area -->
+                <div class="wheel-container max-w-sm w-full aspect-square">
+                    <div class="pointer"></div>
+                    <canvas id="wheelCanvas" width="400" height="400" class="w-full h-full max-w-sm"></canvas>
+                </div>
+
+                <!-- Controls and Results -->
+                <div class="w-full max-w-sm flex flex-col items-center">
+                    <div class="mt-6 flex flex-wrap justify-center gap-4 w-full">
+                        <button id="spinBtn" class="btn-primary flex-grow sm:flex-grow-0">
+                            Spin the Wheel!
+                        </button>
+                        <button id="stopSpinBtn" class="btn-secondary flex-grow sm:flex-grow-0" style="display: none;">
+                            Stop Spin
+                        </button>
+                        
+                        <!-- Settings Toggle Button (Now visible on all screen sizes, integrated into controls) -->
+                        <button id="toggleSettingsBtn" class="btn-secondary flex items-center justify-center space-x-2 flex-grow sm:flex-grow-0 min-w-[120px]">
+                            <!-- Icon from lucide-react equivalent: Settings -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.22a2 2 0 0 0-1.2 1.4L8 7.34a2 2 0 0 0-3 3l-.43 2.52a2 2 0 0 0 1.4 2l.22.44a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.22a2 2 0 0 0 1.2-1.4L12 14.66a2 2 0 0 0 3-3l.43-2.52a2 2 0 0 0-1.4-2l-.22-.44a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <span id="toggleSettingsText">Show Settings</span>
+                        </button>
+                    </div>
+
+                    <div id="resultBox" class="mt-8 p-4 w-full text-center min-h-[4rem] bg-accent/10 border-l-4 border-accent rounded-xl">
+                        <p class="text-xl font-semibold text-gray-800" id="resultText">
+                            Ready to Spin!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Panel (Always starts hidden, takes full width on mobile/one-third on desktop) -->
+            <div id="settingsPanel" class="lg:col-span-1 p-6 bg-white rounded-2xl shadow-2xl h-fit hidden order-2">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Wheel Settings</h2>
+
+                <!-- Section Input -->
+                <div class="mb-4">
+                    <label for="sectionsInput" class="block text-sm font-medium text-gray-700 mb-2">
+                        Enter Wheel Sections (One label per line)
+                    </label>
+                    <textarea id="sectionsInput" rows="10" class="input-style" placeholder="Pizza Night
+Movie Marathon
+Go for a Walk
+Do the Dishes
+Wildcard!
+"></textarea>
+                </div>
+
+                <!-- Continuous Spin Toggle -->
+                <div class="flex items-center justify-between p-3 bg-indigo-50 rounded-xl mb-4">
+                    <label for="continuousToggle" class="text-sm font-medium text-gray-700">
+                        Continuous Spin Mode
+                        <span class="block text-xs text-gray-500">Spins forever until you click 'Stop Spin'.</span>
+                    </label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="continuousToggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                </div>
+
+                <button id="updateWheelBtn" class="w-full btn-secondary">
+                    Update Wheel
+                </button>
+            </div>
+        </main>
     </div>
-    
-    <div class="marker"></div>
-    
-    <!-- Wheel and Result Container -->
-    <div id="wheelContainer" class="wheel-container mb-8">
-        <div id="wheel" class="wheel">
-            <!-- Segments go here -->
-        </div>
-        <div class="center-circle"></div>
-    </div>
 
-    <!-- Controls -->
-    <div class="flex flex-col items-center w-full max-w-sm space-y-4">
-        <button id="spinButton" 
-                class="w-full py-4 px-6 bg-green-500 text-white font-bold text-xl rounded-xl shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-105 disabled:bg-gray-400 disabled:transform-none">
-            Spin the Wheel!
-        </button>
-        
-        <!-- Result Display -->
-        <div id="resultBox" class="w-full p-4 bg-indigo-100 border-l-4 border-indigo-500 rounded-lg shadow-inner text-left">
-            <p class="text-sm font-semibold text-indigo-700 mb-1">Result:</p>
-            <p id="resultText" class="text-2xl font-bold text-indigo-800">Ready to spin!</p>
-        </div>
+    <script>
+        // --- Firebase/Auth/App Globals (Standard boilerplate, not used for this local app) ---
+        // const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --------------------------------------------------------------------------------------
 
-        <!-- Mode Display -->
-        <div class="mt-4 text-sm font-medium text-gray-600">
-            Mode: <span id="modeDisplay" class="font-bold text-red-500">Loading...</span>
-        </div>
-    </div>
+        // Canvas Setup
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = centerX - 10; // Slightly smaller than half-width for padding
 
-    <!-- Message Modal -->
-    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center">
-            <h3 id="modalTitle" class="text-2xl font-bold mb-4 text-indigo-700"></h3>
-            <p id="modalMessage" class="mb-6 text-gray-700"></p>
-            <button onclick="document.getElementById('modal').classList.add('hidden')" 
-                    class="py-2 px-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-150">
-                Close
-            </button>
-        </div>
-    </div>
-
-    <!-- Firebase SDK Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Global Variables & Initialization ---
-        setLogLevel('Debug');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        let db, auth;
-        let wheelConfig = { options: [], isContinuous: false };
-        let currentRotation = 0;
-        let isSpinning = false;
-        
-        try {
-            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-
-            // Authentication setup
-            onAuthStateChanged(auth, async (user) => {
-                // Ensure authentication is complete before fetching config
-                if (!user) {
-                    if (typeof __initial_auth_token !== 'undefined') {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                }
-                loadConfig();
-            });
-
-        } catch (e) {
-            console.error("Firebase Initialization Error:", e);
-            showMessage('Error', 'Failed to initialize the application. Check console for details.');
-        }
-
-
-        // --- Firestore Paths & Refs ---
-        const CONFIG_PATH = `artifacts/${appId}/public/data/wheelConfig`;
-
-        // --- UI Elements ---
-        const wheelElement = document.getElementById('wheel');
-        const spinButton = document.getElementById('spinButton');
+        // DOM Elements
+        const sectionsInput = document.getElementById('sectionsInput');
+        const continuousToggle = document.getElementById('continuousToggle');
+        const updateWheelBtn = document.getElementById('updateWheelBtn');
+        const spinBtn = document.getElementById('spinBtn');
+        const stopSpinBtn = document.getElementById('stopSpinBtn');
         const resultText = document.getElementById('resultText');
-        const modeDisplay = document.getElementById('modeDisplay');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const toggleSettingsBtn = document.getElementById('toggleSettingsBtn');
+        const toggleSettingsText = document.getElementById('toggleSettingsText');
 
-        // --- Utility Functions ---
+        // State Variables
+        let sections = [];
+        let isSpinning = false;
+        let isContinuous = false;
+        let currentRotation = 0; // Current rotation angle in radians
+        let spinSpeed = 0; // Speed in radians per frame
+        let animationFrameId = null;
+        let animationDuration = 5000; // ms for normal spin deceleration
+        let startTime = 0; // Timestamp of when the spin started
+        const MIN_SPEED = 0.0002; // Threshold for forcing stop in normal mode
 
-        function showMessage(title, message) {
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalMessage').textContent = message;
-            document.getElementById('modal').classList.remove('hidden');
+        // Predefined color palette for the wheel sections
+        const COLOR_PALETTE = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e',
+            '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6',
+            '#a855f7', '#d946ef', '#ec4899', '#f43f5e'
+        ];
+
+        // --- Core Functions ---
+
+        /**
+         * Centralized function to handle all state cleanup and result display 
+         * when the wheel comes to a complete stop (Normal or Continuous stop).
+         */
+        function handleSpinStop() {
+            // Ensure the rotation is finalized and speed is zeroed
+            spinSpeed = 0;
+            
+            // Explicitly cancel any pending animation frame
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null; 
+            }
+            
+            isSpinning = false;
+            spinBtn.disabled = false;
+            stopSpinBtn.style.display = 'none';
+
+            // Re-enable continuous toggle if it was disabled during a continuous stop sequence
+            if (continuousToggle.disabled) {
+                continuousToggle.disabled = false;
+            }
+
+            // Final landing position and result display
+            const winningIndex = getCurrentSectionIndex(currentRotation);
+            displayResult(winningIndex);
         }
 
-        // --- Wheel Rendering ---
-        const colors = [
-            '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', 
-            '#a1a1aa', '#f43f5e', '#facc15', '#a3e635', '#2dd4bf', '#a78bfa', '#f472b6', '#71717a',
-            '#f87171', '#fb923c', '#fde047', '#4ade80', '#5eead4', '#60a5fa', '#a855f7', '#f472b6'
-        ]; // 24 distinct colors
+        /**
+         * Generates the sections array from the textarea input.
+         */
+        function generateSections() {
+            const labels = sectionsInput.value.split('\n')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
 
-        function renderWheel() {
-            const options = wheelConfig.options;
-            const numOptions = options.length;
-            if (numOptions === 0) {
-                wheelElement.innerHTML = '<div class="text-center p-20 text-gray-500">No options configured. Use admin.html to set them up.</div>';
-                spinButton.disabled = true;
+            if (labels.length === 0) {
+                resultText.textContent = "Please enter at least one section label.";
+                sections = [];
                 return;
             }
-            spinButton.disabled = false;
-            
-            const segmentAngle = 360 / numOptions;
-            const halfAngle = segmentAngle / 2;
-            const skewAngle = 90 - segmentAngle;
-            
-            wheelElement.innerHTML = ''; // Clear existing segments
 
-            options.forEach((option, index) => {
-                const color = colors[index % colors.length];
-                const startRotation = index * segmentAngle;
-                
-                // 1. Create the wedge container
-                const segment = document.createElement('div');
-                segment.className = 'segment';
-                segment.style.backgroundColor = color;
-                // Rotate to position the wedge correctly
-                segment.style.transform = `rotate(${startRotation}deg)`;
+            const numSections = labels.length;
+            const arcSize = (2 * Math.PI) / numSections;
+            const newSections = [];
 
-                // 2. Create the content container and apply rotation/skew to keep text horizontal
-                const content = document.createElement('div');
-                content.className = 'segment-content';
-                
-                // Rotation to counter the segment rotation, plus offset for centering and skew correction
-                const contentTransform = `
-                    rotate(${90 + halfAngle}deg) 
-                    translate(-50%, -50%) 
-                    rotate(${-startRotation}deg) 
-                    translate(20%, -50%)
-                `;
-                content.style.transform = contentTransform;
-
-                // Simple text rendering
-                content.innerHTML = `<span class="truncate">${option.text}</span>`;
-                
-                segment.appendChild(content);
-                wheelElement.appendChild(segment);
+            labels.forEach((label, index) => {
+                const colorIndex = index % COLOR_PALETTE.length;
+                newSections.push({
+                    label: label,
+                    color: COLOR_PALETTE[colorIndex],
+                    startAngle: index * arcSize,
+                    endAngle: (index + 1) * arcSize,
+                    arc: arcSize
+                });
             });
 
-            // Update mode display
-            const mode = wheelConfig.isContinuous ? 'Ev100 (Continuous Spin)' : 'Normal (Stops Randomly)';
-            modeDisplay.textContent = mode;
-            modeDisplay.className = `font-bold ${wheelConfig.isContinuous ? 'text-red-600' : 'text-green-600'}`;
+            sections = newSections;
+            // Set message to ready state after a successful update
+            resultText.textContent = 'Ready to Spin!'; 
+            drawWheel();
         }
 
-        // --- Spin Logic ---
+        /**
+         * Draws the wheel on the canvas at the current rotation.
+         * @param {number} rotation - The current rotation angle in radians.
+         */
+        function drawWheel(rotation = currentRotation) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(rotation);
 
-        function spin() {
-            if (isSpinning || wheelConfig.options.length === 0) return;
-            isSpinning = true;
-            spinButton.disabled = true;
-            resultText.textContent = 'Spinning...';
-            
-            const numOptions = wheelConfig.options.length;
-            const segmentAngle = 360 / numOptions;
-            
-            // Randomly select the winning index
-            const winningIndex = Math.floor(Math.random() * numOptions);
-            const winner = wheelConfig.options[winningIndex];
-            
-            // Calculate the target rotation (in degrees)
-            // Each segment is segmentAngle wide. The pointer is at 0 degrees (top).
-            // We target the center of the winning segment.
-            // Target angle: (360 - (winningIndex * segmentAngle + half of segmentAngle))
-            // We add 10 full rotations (3600 deg) to make it visually satisfying.
+            if (sections.length === 0) {
+                ctx.restore();
+                ctx.fillStyle = '#eee';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '20px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('No Sections', centerX, centerY);
+                return;
+            }
 
-            const offset = segmentAngle / 2; // Target center of the segment
-            const targetPosition = 360 - (winningIndex * segmentAngle + offset);
-            
-            // Ensure target is positive and lands correctly
-            const totalRotations = 10;
-            const targetRotation = totalRotations * 360 + targetPosition;
+            sections.forEach(section => {
+                // Draw Arc
+                ctx.beginPath();
+                ctx.fillStyle = section.color;
+                ctx.arc(0, 0, radius, section.startAngle, section.endAngle);
+                ctx.lineTo(0, 0);
+                ctx.fill();
 
-            // Update the global rotation state
-            currentRotation = targetRotation;
-            
-            // Apply mode-specific styles and logic
-            if (wheelConfig.isContinuous) {
-                // Ev100 / Continuous Mode
-                wheelElement.style.transition = 'transform 600s linear'; // Very long transition
-                wheelElement.style.transform = `rotate(${currentRotation + 100000}deg)`; // Spin a lot
-                
-                // Display the result immediately (the "trick")
-                resultText.textContent = `WINNER (Ev100): ${winner.text}`;
-                
-                // Re-enable button immediately since the spin is "endless"
-                isSpinning = false;
-                spinButton.disabled = false;
+                // Draw Text
+                ctx.save();
+                // Translate to the center of the arc area
+                const textAngle = section.startAngle + section.arc / 2;
+                ctx.rotate(textAngle);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 16px Inter';
+                // Move out 2/3 of the radius from the center
+                ctx.fillText(section.label, radius * 0.75, 5);
+                ctx.restore();
+            });
 
+            ctx.restore();
+
+            // Draw center circle (hub)
+            ctx.beginPath();
+            ctx.fillStyle = '#374151';
+            ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        /**
+         * The main animation loop for the spinning wheel.
+         * @param {number} timestamp - Provided by requestAnimationFrame.
+         */
+        function animate(timestamp) {
+            if (!isSpinning) return;
+
+            // Update rotation
+            currentRotation += spinSpeed;
+            currentRotation %= (2 * Math.PI); // Keep rotation within 0 to 2*PI
+
+            drawWheel();
+
+            if (isContinuous) {
+                // Continuous Mode: Spin at constant speed
+                spinSpeed = 0.1; // Slow, constant speed
+                animationFrameId = requestAnimationFrame(animate);
             } else {
-                // Normal Mode
-                wheelElement.style.transition = 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)'; // Normal transition
-                wheelElement.style.transform = `rotate(${targetRotation}deg)`;
-
-                // Use a transition end event to show the result
-                const handleTransitionEnd = () => {
-                    wheelElement.removeEventListener('transitionend', handleTransitionEnd);
-                    isSpinning = false;
-                    spinButton.disabled = false;
-                    resultText.textContent = `WINNER: ${winner.text}`;
-                };
-
-                // Add the listener (using setTimeout as fallback/to ensure it triggers)
-                wheelElement.addEventListener('transitionend', handleTransitionEnd);
-                setTimeout(() => {
-                    if (isSpinning) { // Fallback if transitionend fails (e.g., element visibility change)
-                        handleTransitionEnd();
-                    }
-                }, 5100); // Slightly longer than the 5s transition
+                // Normal Mode: Decelerate
+                const timePassed = timestamp - startTime;
+                const progress = timePassed / animationDuration;
+                
+                // Check both time duration and minimum speed threshold for stopping
+                if (progress < 1 && spinSpeed > MIN_SPEED) {
+                    // Ease out deceleration curve
+                    // We use a quadratic ease-out (1 - progress^2) on speed for a smoother slowdown
+                    const newSpeed = spinSpeed * (1 - (progress * progress));
+                    spinSpeed = Math.max(MIN_SPEED, newSpeed); // Ensure speed does not drop too low before the end
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                    // Spin is complete (either by time or minimum speed reached)
+                    handleSpinStop(); 
+                }
             }
         }
 
-        // --- Firebase Data Fetching ---
+        /**
+         * Gets the section index the pointer is currently pointing to.
+         * The pointer is fixed at the 12 o'clock position (270 degrees clockwise from 3 o'clock).
+         * @param {number} rotation - The current rotation angle in radians (positive is clockwise).
+         * @returns {number} The index of the winning section.
+         */
+        function getCurrentSectionIndex(rotation) {
+            if (sections.length === 0) return -1;
 
-        function loadConfig() {
-            if (!db) return;
-            const docRef = doc(db, CONFIG_PATH, 'config');
+            const numSections = sections.length;
+            
+            // Pointer is at 12 o'clock. In canvas coordinates (0=3 o'clock, positive=clockwise),
+            // this is 270 degrees, or (3 * Math.PI) / 2 radians.
+            const POINTER_ANGLE = (3 * Math.PI) / 2;
+            const EPSILON = 0.00001; // For float comparison near boundaries
 
-            // Listen for real-time changes to the configuration
-            onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    wheelConfig = {
-                        options: data.options || [],
-                        isContinuous: data.isContinuous === true
-                    };
-                    renderWheel();
-                } else {
-                    wheelConfig = { options: [], isContinuous: false };
-                    renderWheel();
-                    showMessage('Configuration Warning', 'No wheel configuration found. Please use the admin page to set up options.');
+            // Calculate the angle on the UNROTATED wheel that is currently under the pointer.
+            // Winning angle = (Pointer angle - Current Rotation)
+            let winningAngle = POINTER_ANGLE - rotation;
+
+            // 1. Normalize the winningAngle to be positive (0 to 2*PI)
+            winningAngle %= (2 * Math.PI);
+            if (winningAngle < 0) {
+                winningAngle += (2 * Math.PI);
+            }
+
+            // 2. Find which section's [startAngle, endAngle) contains the winningAngle.
+            for (let i = 0; i < numSections; i++) {
+                const section = sections[i];
+
+                // Check if the winning angle falls within the section's arc [start, end)
+                if (winningAngle >= section.startAngle - EPSILON && winningAngle < section.endAngle - EPSILON) {
+                    return i;
                 }
-            }, (error) => {
-                console.error("Firestore snapshot error:", error);
-                showMessage('Error', 'Failed to load configuration data: ' + error.message);
-            });
+            }
+
+            // Fallback for angles near 0/2*PI (which should belong to the first section, section[0])
+            if (winningAngle >= (2 * Math.PI) - EPSILON || winningAngle < EPSILON) {
+                 return 0;
+            }
+
+            return 0; // Final safe fallback
         }
 
+
+        /**
+         * Displays the result in the result box.
+         * @param {number} index - The index of the winning section.
+         */
+        function displayResult(index) {
+            if (index >= 0 && index < sections.length) {
+                const winningSection = sections[index];
+                // Updates the result text, clearing the "Spinning..." message.
+                resultText.innerHTML = `<span class="text-3xl font-extrabold" style="color:${winningSection.color}">${winningSection.label}</span> Wins!`;
+            } else {
+                resultText.textContent = 'Spinning stopped. No valid result found.';
+            }
+        }
+
+        /**
+         * Starts the spinning process.
+         */
+        function startSpin() {
+            if (isSpinning || sections.length === 0) return;
+
+            isSpinning = true;
+            spinBtn.disabled = true;
+            resultText.textContent = 'Spinning...';
+
+            if (isContinuous) {
+                // Continuous Mode: Set a constant spin speed
+                spinSpeed = 0.1; // Slow, constant speed
+                stopSpinBtn.style.display = 'inline-block';
+                stopSpinBtn.disabled = false;
+            } else {
+                // Normal Mode: Decelerate
+                stopSpinBtn.style.display = 'none';
+
+                // Initial high speed burst
+                spinSpeed = 0.5 + Math.random() * 0.5;
+                
+                // Use a starting timestamp for the animation's time-based deceleration
+                startTime = performance.now();
+                animationDuration = 5000 + Math.random() * 2000; // 5 to 7 seconds spin time
+            }
+
+            // Start the animation loop
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        /**
+         * Initiates the deceleration/stop sequence for Continuous Mode.
+         */
+        function stopContinuousSpin() {
+            if (!isSpinning || !isContinuous) return;
+
+            isContinuous = false; // SWITCHES MODE for 'animate' function
+            continuousToggle.disabled = true; // Disable toggle while decelerating
+            stopSpinBtn.disabled = true;
+
+            // Set up deceleration phase
+            startTime = performance.now();
+            animationDuration = 3000; // 3 seconds deceleration
+            resultText.textContent = 'Stopping spin...';
+
+            // The `animate` function will now switch to the deceleration logic and handle the final cleanup via handleSpinStop.
+        }
+
+        /**
+         * Toggles the visibility of the settings panel on all screen sizes.
+         */
+        function toggleSettings() {
+            const isHidden = settingsPanel.classList.toggle('hidden');
+            if (isHidden) {
+                toggleSettingsText.textContent = 'Show Settings';
+            } else {
+                toggleSettingsText.textContent = 'Hide Settings';
+            }
+        }
+
+
         // --- Event Listeners ---
-        spinButton.addEventListener('click', spin);
+
+        updateWheelBtn.addEventListener('click', () => {
+             generateSections();
+             // Optionally hide settings panel after updating, for mobile-first feel
+             if (!settingsPanel.classList.contains('hidden')) {
+                 toggleSettings();
+             }
+        });
+        sectionsInput.addEventListener('change', generateSections);
+
+        spinBtn.addEventListener('click', startSpin);
         
-        // Initial wheel reset (to ensure a clean starting point)
-        wheelElement.style.transform = `rotate(0deg)`;
+        toggleSettingsBtn.addEventListener('click', toggleSettings);
+
+        // Simple and clean stop handler, relies entirely on animate() for cleanup
+        stopSpinBtn.addEventListener('click', () => {
+            stopContinuousSpin();
+        });
+
+        continuousToggle.addEventListener('change', (e) => {
+            isContinuous = e.target.checked;
+            if (isSpinning) {
+                // If spinning, we don't allow changing mode until stopped
+                e.target.checked = !isContinuous;
+            }
+        });
+
+        // --- Initialization ---
+
+        // Set default sections
+        sectionsInput.value = `Work on Project Alpha
+Take a Break
+Review Code
+Write Documentation
+Team Meeting
+Brainstorm Session`;
+
+        // Initialize wheel and canvas after DOM load
+        window.onload = function() {
+            generateSections();
+            isContinuous = continuousToggle.checked;
+        };
 
     </script>
 </body>
